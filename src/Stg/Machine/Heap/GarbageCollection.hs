@@ -2,7 +2,9 @@
 
 -- | Remove unused heap objects.
 module Stg.Machine.Heap.GarbageCollection (
-    garbageCollect
+    garbageCollect,
+    Dead(..),
+    Alive(..),
 ) where
 
 
@@ -19,6 +21,12 @@ import           Stg.Machine.Types
 
 
 
+-- | Alive memory addresses.
+newtype Alive = Alive (Set MemAddr)
+
+-- | Dead memory addresses that have been eliminated by garbage collection.
+newtype Dead = Dead (Set MemAddr)
+
 -- | Simple tracing garbage collector.
 --
 -- 1. Get the addresses of all globals.
@@ -28,13 +36,14 @@ import           Stg.Machine.Types
 garbageCollect
     :: Globals -- ^ Root elements (unconditionally alive).
     -> Heap
-    -> (Set MemAddr, Set MemAddr, Heap) -- ^ (dead, alive, new heap)
-garbageCollect globals heap = (dead, alive, cleanHeap)
+    -> (Dead, Alive, Heap)
+garbageCollect globals heap = (Dead dead, Alive alive, cleanHeap)
   where
     alive = aliveAddresses globals heap
     dead = let Heap h = heap
            in M.keysSet h `S.difference` alive
-    cleanHeap = heap `keepOnly` alive
+    (cleanHeap, _dropped) = let isAlive addr _ = S.member addr alive
+                            in M.partitionWithKey isAlive heap
 
 -- | Find all alive addresses in the heap, starting at the values of the
 -- globals, which are considered alive.
@@ -43,16 +52,6 @@ aliveAddresses (Globals globals) (Heap heap) = foldMap addrs globalClosures
   where
     globalAddrs = [ addr | (_, Addr addr) <- M.toList globals ]
     globalClosures = mapMaybe (\addr -> M.lookup addr heap) globalAddrs
-
--- | Drop everything but certain addresses from the heap.
-keepOnly
-    :: Heap
-    -> Set MemAddr -- ^ Addresses to keep
-    -> Heap
-keepOnly (Heap heap) keep = Heap (M.intersectionWith
-    (\closure () -> closure)
-    heap
-    (M.fromSet (const ()) keep) )
 
 
 
