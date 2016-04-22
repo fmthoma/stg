@@ -37,11 +37,10 @@ garbageCollect
     :: Globals -- ^ Root elements (unconditionally alive).
     -> Heap
     -> (Dead, Alive, Heap)
-garbageCollect globals heap = (Dead dead, Alive alive, cleanHeap)
+garbageCollect globals h@(Heap heap) = (Dead dead, Alive alive, Heap cleanHeap)
   where
-    alive = aliveAddresses globals heap
-    dead = let Heap h = heap
-           in M.keysSet h `S.difference` alive
+    alive = aliveAddresses globals h
+    dead = M.keysSet heap `S.difference` alive
     (cleanHeap, _dropped) = let isAlive addr _ = S.member addr alive
                             in M.partitionWithKey isAlive heap
 
